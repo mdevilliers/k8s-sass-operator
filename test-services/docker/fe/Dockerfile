@@ -1,0 +1,4 @@
+FROM scratch
+EXPOSE 3000
+COPY fe /
+ENTRYPOINT ["/fe"]
