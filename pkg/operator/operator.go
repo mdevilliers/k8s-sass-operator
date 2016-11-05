@@ -37,6 +37,17 @@ func (o *operator) ProvisionInstance() error {
 		}
 	}
 
+	replicationControllers := replicationControllercDefinitions(instance)
+
+	for _, rc := range replicationControllers {
+
+		_, err := o.client.ReplicationControllers(o.namespace).Create(rc)
+
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -46,6 +57,10 @@ func serviceDefinitions(instance string) []*api.Service {
 		storeService(instance),
 		userService(instance),
 	}
+}
+
+func replicationControllercDefinitions(instance string) []*api.ReplicationController {
+	return []*api.ReplicationController{}
 }
 
 func frontEndService(instance string) *api.Service {
