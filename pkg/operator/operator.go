@@ -59,10 +59,6 @@ func serviceDefinitions(instance string) []*api.Service {
 	}
 }
 
-func replicationControllercDefinitions(instance string) []*api.ReplicationController {
-	return []*api.ReplicationController{}
-}
-
 func frontEndService(instance string) *api.Service {
 	labels := map[string]string{
 		"app":      "front-end",
@@ -131,6 +127,49 @@ func userService(instance string) *api.Service {
 				},
 			},
 			Selector: labels,
+		},
+	}
+}
+
+func replicationControllercDefinitions(instance string) []*api.ReplicationController {
+	return []*api.ReplicationController{
+		frontEndServiceRC(instance),
+	}
+}
+
+func frontEndServiceRC(instance string) *api.ReplicationController {
+	labels := map[string]string{
+		"app":      "front-end-service",
+		"instance": instance,
+		"version":  "1",
+	}
+	return &api.ReplicationController{
+		ObjectMeta: api.ObjectMeta{
+			Name: "fe-service-rc",
+		},
+		Spec: api.ReplicationControllerSpec{
+			Replicas: 3,
+			Selector: labels,
+			Template: &api.PodTemplateSpec{
+				ObjectMeta: api.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: api.PodSpec{
+					Containers: []api.Container{
+						api.Container{
+							Image:           "sass-infrastructure/fe",
+							Name:            "web",
+							ImagePullPolicy: api.PullIfNotPresent,
+							Ports: []api.ContainerPorts{
+								api.ContainerPort{
+									ContainerPort: 3000,
+									Protocol:      api.ProtocolTCP,
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 }
