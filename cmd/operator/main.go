@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/mdevilliers/k8s-sass-operator/pkg/operator"
 
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/client/leaderelection"
@@ -52,27 +53,38 @@ func main() {
 	}
 
 	logrus.Info("sass-operator starting...")
-	logrus.Info("hostname", hostname)
-	logrus.Info("namespace", namespace)
+	logrus.Info("hostname : ", hostname)
+	logrus.Info("namespace : ", namespace)
+
+	clientConfig := &restclient.TLSClientConfig{
+		CertFile: certFile,
+		KeyFile:  keyFile,
+		CAFile:   caFile,
+	}
+
+	client := MustCreateClient(masterHost, tlsInsecure, clientConfig)
 
 	leaderelection.RunOrDie(leaderelection.LeaderElectionConfig{
 		EndpointsMeta: api.ObjectMeta{
 			Namespace: namespace,
 			Name:      "sass-operator",
 		},
-		Client: MustCreateClient(masterHost, tlsInsecure, &restclient.TLSClientConfig{
-			CertFile: certFile,
-			KeyFile:  keyFile,
-			CAFile:   caFile,
-		}),
+		Client:        client,
 		EventRecorder: &record.FakeRecorder{},
-		Identity:      id,
+		Identity:      hostname,
 		LeaseDuration: leaseDuration,
 		RenewDeadline: renewDuration,
 		RetryPeriod:   retryPeriod,
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(stop <-chan struct{}) {
 				logrus.Info("ego leader...")
+
+				o := operator.New(client, namespace)
+				err := o.ProvisionInstance()
+				if err != nil {
+					logrus.Fatal(err)
+				}
+
 				<-stop
 				logrus.Info("no longer the leader.")
 			},
