@@ -26,20 +26,34 @@ func (o *operator) ProvisionInstance() error {
 
 	instance := "default"
 
-	_, err := o.client.Services(o.namespace).Create(newFEService(instance))
+	services := serviceDefinitions(instance)
 
-	if err != nil {
-		return err
+	for _, service := range services {
+
+		_, err := o.client.Services(o.namespace).Create(service)
+
+		if err != nil {
+			return err
+		}
 	}
+
 	return nil
 }
 
-func newFEService(instance string) *api.Service {
+func serviceDefinitions(instance string) []*api.Service {
+	return []*api.Service{
+		frontEndService(instance),
+		storeService(instance),
+		userService(instance),
+	}
+}
+
+func frontEndService(instance string) *api.Service {
 	labels := map[string]string{
-		"app":      "fe",
+		"app":      "front-end",
 		"instance": instance,
 	}
-	svc := &api.Service{
+	return &api.Service{
 		ObjectMeta: api.ObjectMeta{
 			Name:   fmt.Sprintf("front-end-%s", instance),
 			Labels: labels,
@@ -56,5 +70,52 @@ func newFEService(instance string) *api.Service {
 			Selector: labels,
 		},
 	}
-	return svc
+}
+
+func storeService(instance string) *api.Service {
+	labels := map[string]string{
+		"app":      "store-service",
+		"instance": instance,
+	}
+	return &api.Service{
+		ObjectMeta: api.ObjectMeta{
+			Name:   fmt.Sprintf("store-service-%s", instance),
+			Labels: labels,
+		},
+		Spec: api.ServiceSpec{
+			Ports: []api.ServicePort{
+				{
+					Name:       "web",
+					Port:       8080,
+					TargetPort: intstr.FromInt(3000),
+					Protocol:   api.ProtocolTCP,
+				},
+			},
+			Selector: labels,
+		},
+	}
+}
+
+func userService(instance string) *api.Service {
+	labels := map[string]string{
+		"app":      "user-service",
+		"instance": instance,
+	}
+	return &api.Service{
+		ObjectMeta: api.ObjectMeta{
+			Name:   fmt.Sprintf("user-service-%s", instance),
+			Labels: labels,
+		},
+		Spec: api.ServiceSpec{
+			Ports: []api.ServicePort{
+				{
+					Name:       "web",
+					Port:       8080,
+					TargetPort: intstr.FromInt(3000),
+					Protocol:   api.ProtocolTCP,
+				},
+			},
+			Selector: labels,
+		},
+	}
 }
