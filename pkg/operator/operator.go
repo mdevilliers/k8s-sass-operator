@@ -2,8 +2,11 @@ package operator
 
 import (
 	"fmt"
+	"net/http"
 
 	"k8s.io/kubernetes/pkg/api"
+	apierrors "k8s.io/kubernetes/pkg/api/errors"
+	unversionedAPI "k8s.io/kubernetes/pkg/api/unversioned"
 	"k8s.io/kubernetes/pkg/client/unversioned"
 	"k8s.io/kubernetes/pkg/util/intstr"
 )
@@ -24,16 +27,21 @@ func New(client *unversioned.Client, namespace string) *operator {
 
 func (o *operator) ProvisionInstance() error {
 
-	instance := "default"
+	//TODO : is there an instance of this name already
+	// if so patch or delete and create
+	// at the moment just press on regardless
 
+	instance := "default"
 	services := serviceDefinitions(instance)
 
 	for _, service := range services {
 
 		_, err := o.client.Services(o.namespace).Create(service)
 
+		err = filterKubernetesResourceAlreadyExistError(err)
+
 		if err != nil {
-			return err
+			return nil
 		}
 	}
 
@@ -43,8 +51,10 @@ func (o *operator) ProvisionInstance() error {
 
 		_, err := o.client.ReplicationControllers(o.namespace).Create(rc)
 
+		err = filterKubernetesResourceAlreadyExistError(err)
+
 		if err != nil {
-			return err
+			return nil
 		}
 	}
 
@@ -134,6 +144,8 @@ func userService(instance string) *api.Service {
 func replicationControllercDefinitions(instance string) []*api.ReplicationController {
 	return []*api.ReplicationController{
 		frontEndServiceRC(instance),
+		storeServiceRC(instance),
+		userServiceRC(instance),
 	}
 }
 
@@ -158,9 +170,8 @@ func frontEndServiceRC(instance string) *api.ReplicationController {
 					Containers: []api.Container{
 						api.Container{
 							Image:           "sass-infrastructure/fe",
-							Name:            "web",
 							ImagePullPolicy: api.PullIfNotPresent,
-							Ports: []api.ContainerPorts{
+							Ports: []api.ContainerPort{
 								api.ContainerPort{
 									ContainerPort: 3000,
 									Protocol:      api.ProtocolTCP,
@@ -172,4 +183,87 @@ func frontEndServiceRC(instance string) *api.ReplicationController {
 			},
 		},
 	}
+}
+
+func storeServiceRC(instance string) *api.ReplicationController {
+	labels := map[string]string{
+		"app":      "store-service",
+		"instance": instance,
+		"version":  "1",
+	}
+	return &api.ReplicationController{
+		ObjectMeta: api.ObjectMeta{
+			Name: "store-service-rc",
+		},
+		Spec: api.ReplicationControllerSpec{
+			Replicas: 3,
+			Selector: labels,
+			Template: &api.PodTemplateSpec{
+				ObjectMeta: api.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: api.PodSpec{
+					Containers: []api.Container{
+						api.Container{
+							Image:           "sass-infrastructure/store-service",
+							ImagePullPolicy: api.PullIfNotPresent,
+							Ports: []api.ContainerPort{
+								api.ContainerPort{
+									ContainerPort: 3000,
+									Protocol:      api.ProtocolTCP,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func userServiceRC(instance string) *api.ReplicationController {
+	labels := map[string]string{
+		"app":      "user-service",
+		"instance": instance,
+		"version":  "1",
+	}
+	return &api.ReplicationController{
+		ObjectMeta: api.ObjectMeta{
+			Name: "user-service-rc",
+		},
+		Spec: api.ReplicationControllerSpec{
+			Replicas: 3,
+			Selector: labels,
+			Template: &api.PodTemplateSpec{
+				ObjectMeta: api.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: api.PodSpec{
+					Containers: []api.Container{
+						api.Container{
+							Image:           "sass-infrastructure/user-service",
+							ImagePullPolicy: api.PullIfNotPresent,
+							Ports: []api.ContainerPort{
+								api.ContainerPort{
+									ContainerPort: 3000,
+									Protocol:      api.ProtocolTCP,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func filterKubernetesResourceAlreadyExistError(err error) error {
+	se, ok := err.(*apierrors.StatusError)
+	if !ok {
+		return err
+	}
+	if se.Status().Code == http.StatusConflict && se.Status().Reason == unversionedAPI.StatusReasonAlreadyExists {
+		return nil
+	}
+	return err
 }
