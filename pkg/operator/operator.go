@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/Sirupsen/logrus"
+
 	"k8s.io/kubernetes/pkg/api"
 	apierrors "k8s.io/kubernetes/pkg/api/errors"
 	unversionedAPI "k8s.io/kubernetes/pkg/api/unversioned"
@@ -34,9 +36,12 @@ func (o *operator) ProvisionInstance() error {
 	instance := "default"
 	services := serviceDefinitions(instance)
 
+	logrus.Info("deploying services")
 	for _, service := range services {
 
-		_, err := o.client.Services(o.namespace).Create(service)
+		logrus.Info("deploying : ", service.Name)
+
+		_, err := o.client.Services(o.namespace).Create(&service)
 
 		err = filterKubernetesResourceAlreadyExistError(err)
 
@@ -47,13 +52,20 @@ func (o *operator) ProvisionInstance() error {
 
 	replicationControllers := replicationControllercDefinitions(instance)
 
+	logrus.Info("deploying replication controllers")
+
 	for _, rc := range replicationControllers {
 
-		_, err := o.client.ReplicationControllers(o.namespace).Create(rc)
+		logrus.Info("deploying : ", rc.Name)
+
+		_, err := o.client.ReplicationControllers(o.namespace).Create(&rc)
 
 		err = filterKubernetesResourceAlreadyExistError(err)
 
 		if err != nil {
+
+			logrus.Info(err)
+
 			return nil
 		}
 	}
@@ -61,20 +73,20 @@ func (o *operator) ProvisionInstance() error {
 	return nil
 }
 
-func serviceDefinitions(instance string) []*api.Service {
-	return []*api.Service{
+func serviceDefinitions(instance string) []api.Service {
+	return []api.Service{
 		frontEndService(instance),
 		storeService(instance),
 		userService(instance),
 	}
 }
 
-func frontEndService(instance string) *api.Service {
+func frontEndService(instance string) api.Service {
 	labels := map[string]string{
 		"app":      "front-end",
 		"instance": instance,
 	}
-	return &api.Service{
+	return api.Service{
 		ObjectMeta: api.ObjectMeta{
 			Name:   fmt.Sprintf("front-end-%s", instance),
 			Labels: labels,
@@ -89,16 +101,17 @@ func frontEndService(instance string) *api.Service {
 				},
 			},
 			Selector: labels,
+			Type:     api.ServiceTypeNodePort,
 		},
 	}
 }
 
-func storeService(instance string) *api.Service {
+func storeService(instance string) api.Service {
 	labels := map[string]string{
 		"app":      "store-service",
 		"instance": instance,
 	}
-	return &api.Service{
+	return api.Service{
 		ObjectMeta: api.ObjectMeta{
 			Name:   fmt.Sprintf("store-service-%s", instance),
 			Labels: labels,
@@ -117,12 +130,12 @@ func storeService(instance string) *api.Service {
 	}
 }
 
-func userService(instance string) *api.Service {
+func userService(instance string) api.Service {
 	labels := map[string]string{
 		"app":      "user-service",
 		"instance": instance,
 	}
-	return &api.Service{
+	return api.Service{
 		ObjectMeta: api.ObjectMeta{
 			Name:   fmt.Sprintf("user-service-%s", instance),
 			Labels: labels,
@@ -141,21 +154,21 @@ func userService(instance string) *api.Service {
 	}
 }
 
-func replicationControllercDefinitions(instance string) []*api.ReplicationController {
-	return []*api.ReplicationController{
+func replicationControllercDefinitions(instance string) []api.ReplicationController {
+	return []api.ReplicationController{
 		frontEndServiceRC(instance),
 		storeServiceRC(instance),
 		userServiceRC(instance),
 	}
 }
 
-func frontEndServiceRC(instance string) *api.ReplicationController {
+func frontEndServiceRC(instance string) api.ReplicationController {
 	labels := map[string]string{
 		"app":      "front-end-service",
 		"instance": instance,
 		"version":  "1",
 	}
-	return &api.ReplicationController{
+	return api.ReplicationController{
 		ObjectMeta: api.ObjectMeta{
 			Name: "fe-service-rc",
 		},
@@ -169,6 +182,7 @@ func frontEndServiceRC(instance string) *api.ReplicationController {
 				Spec: api.PodSpec{
 					Containers: []api.Container{
 						api.Container{
+							Name:            "web",
 							Image:           "sass-infrastructure/fe",
 							ImagePullPolicy: api.PullIfNotPresent,
 							Ports: []api.ContainerPort{
@@ -185,13 +199,13 @@ func frontEndServiceRC(instance string) *api.ReplicationController {
 	}
 }
 
-func storeServiceRC(instance string) *api.ReplicationController {
+func storeServiceRC(instance string) api.ReplicationController {
 	labels := map[string]string{
 		"app":      "store-service",
 		"instance": instance,
 		"version":  "1",
 	}
-	return &api.ReplicationController{
+	return api.ReplicationController{
 		ObjectMeta: api.ObjectMeta{
 			Name: "store-service-rc",
 		},
@@ -205,6 +219,7 @@ func storeServiceRC(instance string) *api.ReplicationController {
 				Spec: api.PodSpec{
 					Containers: []api.Container{
 						api.Container{
+							Name:            "api",
 							Image:           "sass-infrastructure/store-service",
 							ImagePullPolicy: api.PullIfNotPresent,
 							Ports: []api.ContainerPort{
@@ -221,13 +236,13 @@ func storeServiceRC(instance string) *api.ReplicationController {
 	}
 }
 
-func userServiceRC(instance string) *api.ReplicationController {
+func userServiceRC(instance string) api.ReplicationController {
 	labels := map[string]string{
 		"app":      "user-service",
 		"instance": instance,
 		"version":  "1",
 	}
-	return &api.ReplicationController{
+	return api.ReplicationController{
 		ObjectMeta: api.ObjectMeta{
 			Name: "user-service-rc",
 		},
@@ -241,6 +256,7 @@ func userServiceRC(instance string) *api.ReplicationController {
 				Spec: api.PodSpec{
 					Containers: []api.Container{
 						api.Container{
+							Name:            "api",
 							Image:           "sass-infrastructure/user-service",
 							ImagePullPolicy: api.PullIfNotPresent,
 							Ports: []api.ContainerPort{
