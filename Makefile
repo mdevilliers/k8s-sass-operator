@@ -22,3 +22,5 @@ deploy:
 deploy-services:
 	$(MAKE) -C test-services all
 
+.PHONY: deploy-services
+
