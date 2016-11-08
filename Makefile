@@ -19,3 +19,6 @@ deploy:
 
 .PHONY: deploy
 
+deploy-services:
+	$(MAKE) -C test-services all
+
